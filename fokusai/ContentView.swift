@@ -8,14 +8,37 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var showingSplash = true
+    @State private var isAuthenticated = SupabaseService.shared.isAuthenticated
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        ZStack {
+            if showingSplash {
+                SplashView {
+                    showingSplash = false
+                }
+                .transition(.opacity)
+            } else {
+                if isAuthenticated {
+                    HomeView()
+                        .transition(.opacity)
+                } else {
+                    AuthView {
+                        withAnimation(.fokusSpring) {
+                            isAuthenticated = true
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            }
         }
-        .padding()
+        .onAppear {
+            // Listen for auth state changes
+            Task {
+                await SupabaseService.shared.checkSession()
+                isAuthenticated = SupabaseService.shared.isAuthenticated
+            }
+        }
     }
 }
 
