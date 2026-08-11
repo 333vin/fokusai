@@ -2,207 +2,257 @@
 //  HomeView.swift
 //  fokusai
 //
-//  Created by Navneet Sharma on 2026-07-16.
+//  The calm deep-blue room: Focus Orb centerpiece, stat bar, active task
+//  cards, and a warm witty empty state. Celebration lives elsewhere.
 //
 
 import SwiftUI
 
 struct HomeView: View {
-    @State private var appState = AppState()
+    @Environment(AppState.self) private var appState
+
     @State private var showingNewTask = false
-    @State private var selectedTask: Task?
-    
+    @State private var selectedTask: TaskItem?
+    @State private var emptyStateLine = Copy.random(.homeEmpty)
+
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.bg.ignoresSafeArea()
-                
+                AppBackground()
+
                 ScrollView {
-                    VStack(spacing: 24) {
-                        // Focus Orb
+                    VStack(spacing: 20) {
+                        // The companion. Awake when something's in motion.
                         FocusOrb(
-                            state: appState.tasks.contains(where: { $0.status == .active }) ? .dim : .dim,
-                            level: appState.currentLevel
+                            state: appState.activeTasks.isEmpty ? .dim : .pulsing,
+                            level: appState.currentLevel,
+                            skin: .named(appState.profile.selectedSkin),
+                            size: 130
                         )
-                        .padding(.top, 20)
-                        
-                        // Stats Bar
-                        statsBar
-                        
-                        // Task List
+                        .padding(.top, -4)
+
                         VStack(spacing: Layout.cardSpacing) {
-                            if activeTasks.isEmpty {
+                            StatBar(
+                                level: appState.currentLevel,
+                                xpProgress: appState.xpProgress,
+                                xp: appState.currentXP,
+                                streak: appState.streakCount,
+                                flairKey: appState.profile.selectedFlameFlair
+                            ) {
+                                navigateToUpgrades = true
+                            }
+
+                            noticeBanner
+
+                            if appState.activeTasks.isEmpty {
                                 emptyState
                             } else {
-                                ForEach(activeTasks) { task in
-                                    TaskCard(task: task)
-                                        .onTapGesture {
-                                            selectedTask = task
-                                        }
+                                ForEach(appState.activeTasks) { task in
+                                    TaskCard(task: task) {
+                                        selectedTask = task
+                                    }
                                 }
                             }
                         }
                         .padding(.horizontal, Layout.screenPadding)
+
+                        Spacer(minLength: 110)
                     }
                 }
-                
-                // Floating New Task Button
+
+                // Floating "+ New task"
                 VStack {
                     Spacer()
-                    newTaskButton
-                        .padding(.bottom, 32)
+                    Button {
+                        showingNewTask = true
+                    } label: {
+                        Label("New task", systemImage: "plus")
+                            .fokusPrimaryCapsule()
+                    }
+                    .accessibilityHint("Opens a new task to break down")
+                    .padding(.bottom, 24)
                 }
             }
             .navigationDestination(item: $selectedTask) { task in
-                TaskDetailView(task: task, appState: appState)
+                TaskDetailView(taskID: task.id)
+            }
+            .navigationDestination(isPresented: $navigateToUpgrades) {
+                UpgradesView()
             }
             .sheet(isPresented: $showingNewTask) {
-                NewTaskView(appState: appState)
+                NewTaskView { newTask in
+                    selectedTask = newTask
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     BrandLogo(size: .small, showGradient: true)
                 }
-            }
-        }
-    }
-    
-    private var activeTasks: [Task] {
-        appState.tasks.filter { $0.status == .active }
-    }
-    
-    private var statsBar: some View {
-        HStack(spacing: 20) {
-            // Streak
-            HStack(spacing: 6) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(Color.accent)
-                Text("\(appState.streakCount)")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.accent)
-                Text("day streak")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-            }
-            
-            Spacer()
-            
-            // Level & XP Progress
-            HStack(spacing: 8) {
-                Text("L\(appState.currentLevel)")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color.textPrimary)
-                
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.surface)
-                        .frame(width: 100, height: 8)
-                    
-                    Capsule()
-                        .fill(Color.brand)
-                        .frame(width: 100 * appState.xpProgress, height: 8)
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .accessibilityLabel("Profile and settings")
                 }
-                
-                Text("\(appState.currentXP) XP")
-                    .font(.caption)
-                    .foregroundStyle(Color.textSecondary)
+                #if DEBUG
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        OrbLabView()
+                    } label: {
+                        Image(systemName: "circle.hexagongrid.circle")
+                            .foregroundStyle(Color.textSecondary)
+                    }
+                    .accessibilityLabel("Orb Lab (debug)")
+                }
+                #endif
+            }
+            .onAppear {
+                if appState.activeTasks.isEmpty {
+                    emptyStateLine = Copy.random(.homeEmpty)
+                }
             }
         }
-        .padding(.horizontal, Layout.screenPadding)
     }
-    
+
+    @State private var navigateToUpgrades = false
+
+    // MARK: Warm notices (freeze used / streak reset)
+
+    @ViewBuilder
+    private var noticeBanner: some View {
+        if appState.pendingFreezeNotice {
+            NoticeCard(
+                symbol: "snowflake",
+                tint: .focus,
+                message: Copy.random(.freezeUsed)
+            ) {
+                appState.pendingFreezeNotice = false
+            }
+        } else if appState.pendingStreakResetNotice {
+            NoticeCard(
+                symbol: "sunrise.fill",
+                tint: .brand,
+                message: Copy.random(.streakReturn)
+            ) {
+                appState.pendingStreakResetNotice = false
+            }
+        }
+    }
+
+    // MARK: Empty state
+
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Text("Ready to start?")
-                .font(.title2)
-                .fontWeight(.semibold)
+        VStack(spacing: 14) {
+            Text(emptyStateLine)
+                .font(.fokusRounded(.title3, weight: .medium))
                 .foregroundStyle(Color.textPrimary)
-            
-            Text("Tap below to add your first task.\nWe'll break it into tiny steps.")
-                .font(.body)
+                .multilineTextAlignment(.center)
+
+            Text("Type the thing. We'll shrink it until starting feels easy.")
+                .font(.subheadline)
                 .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 60)
-    }
-    
-    private var newTaskButton: some View {
-        Button {
-            showingNewTask = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .fontWeight(.semibold)
-                Text("New task")
-                    .fontWeight(.semibold)
-            }
-            .font(.body)
-            .foregroundStyle(Color.bg)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 16)
-            .background(
-                Capsule()
-                    .fill(Color.accent)
-            )
-            .shadow(color: .accent.opacity(0.3), radius: 12, x: 0, y: 6)
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 44)
+        .padding(.horizontal, 20)
+        .fokusCard()
     }
 }
 
-struct TaskCard: View {
-    let task: Task
-    
+// MARK: - Notice card
+
+private struct NoticeCard: View {
+    let symbol: String
+    let tint: Color
+    let message: String
+    let onDismiss: () -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Title
-            Text(task.title)
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
                 .font(.body)
-                .fontWeight(.medium)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.subheadline)
                 .foregroundStyle(Color.textPrimary)
-            
-            // Progress
-            HStack(spacing: 8) {
-                Text("\(task.completedMicrotasksCount)/\(task.microtasks.count) steps")
-                    .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.textSecondary)
-                
-                Spacer()
-                
-                if task.completedMicrotasksCount > 0 {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.success)
-                        .font(.caption)
-                }
             }
-            
-            // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.surface)
-                        .frame(height: 4)
-                    
-                    Capsule()
-                        .fill(Color.brand)
-                        .frame(width: geometry.size.width * task.progress, height: 4)
-                }
-            }
-            .frame(height: 4)
+            .accessibilityLabel("Dismiss")
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: Layout.cardRadius)
-                .fill(Color.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Layout.cardRadius)
-                        .stroke(Color.stroke, lineWidth: 1)
-                )
+        .padding(14)
+        .fokusCard(fill: .surfaceRaised)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
+
+// MARK: - Task card
+
+struct TaskCard: View {
+    let task: TaskItem
+    var onTap: (() -> Void)?
+
+    private var nextStep: Microtask? {
+        task.microtasks
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .first { $0.status == .todo }
+    }
+
+    var body: some View {
+        Button {
+            onTap?()
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    Text(task.title)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Color.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Text("\(task.completedMicrotasksCount) / \(task.microtasks.count)")
+                        .font(.fokusRounded(.footnote))
+                        .foregroundStyle(Color.textSecondary)
+                }
+
+                if let nextStep {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.caption)
+                            .foregroundStyle(Color.focus)
+                        Text(nextStep.text)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                ProgressView(value: task.progress)
+                    .tint(.focus)
+            }
+            .padding(16)
+            .fokusCard()
+        }
+        .accessibilityLabel(
+            "\(task.title), \(task.completedMicrotasksCount) of \(task.microtasks.count) steps done" +
+            (nextStep.map { ". Next: \($0.text)" } ?? "")
         )
     }
 }
 
-#Preview {
-    HomeView()
+#Preview("Populated") {
+    let state = AppState()
+    state.tasks = MockData.sampleTasks
+    return HomeView().environment(state)
+}
+
+#Preview("Empty") {
+    HomeView().environment(AppState())
 }

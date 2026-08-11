@@ -1,5 +1,5 @@
 //
-//  Task.swift
+//  TaskItem.swift
 //  fokusai
 //
 //  Created by Navneet Sharma on 2026-07-16.
@@ -13,7 +13,9 @@ enum TaskStatus: String, Codable, Hashable {
     case abandoned
 }
 
-struct Task: Identifiable, Codable, Hashable {
+/// Named `TaskItem` (not `Task`) to avoid shadowing Swift Concurrency's `Task`.
+/// Maps to the planned backend `tasks` table.
+struct TaskItem: Identifiable, Codable, Hashable {
     let id: UUID
     var userId: UUID?
     let title: String

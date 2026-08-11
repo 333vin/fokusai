@@ -2,182 +2,188 @@
 //  MicrotaskFocusView.swift
 //  fokusai
 //
-//  Created by Navneet Sharma on 2026-07-16.
+//  One microtask, large and centered; orb pulsing beside it; a short
+//  countdown. Two actions — "Done" and "Ran out of time" — and both are wins.
 //
 
 import SwiftUI
 
 struct MicrotaskFocusView: View {
-    let task: Task
-    let microtask: Microtask
-    let appState: AppState
-    
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    
-    @State private var timeRemaining: Int
-    @State private var isTimerRunning = false
-    @State private var showingCompletion = false
-    
-    init(task: Task, microtask: Microtask, appState: AppState) {
-        self.task = task
+
+    let taskID: UUID
+    let microtask: Microtask
+
+    @State private var secondsRemaining: Int
+    @State private var timerRunning = false
+    @State private var rewardResult: RewardResult?
+    @State private var nudgeLine = Copy.random(.focusNudge)
+
+    init(taskID: UUID, microtask: Microtask) {
+        self.taskID = taskID
         self.microtask = microtask
-        self.appState = appState
-        self._timeRemaining = State(initialValue: microtask.estimatedMinutes * 60)
+        self._secondsRemaining = State(initialValue: microtask.estimatedMinutes * 60)
     }
-    
+
     var body: some View {
         ZStack {
-            Color.bg.ignoresSafeArea()
-            
-            VStack(spacing: 40) {
+            AppBackground()
+
+            VStack(spacing: 32) {
                 Spacer()
-                
-                // Focus Orb
+
                 FocusOrb(
-                    state: isTimerRunning ? .pulsing : .dim,
-                    level: appState.currentLevel
+                    state: rewardResult != nil ? .flare : (timerRunning ? .pulsing : .dim),
+                    level: appState.currentLevel,
+                    skin: .named(appState.profile.selectedSkin),
+                    size: 130
                 )
-                
-                // Timer
-                Text(timeString(from: timeRemaining))
-                    .font(.system(size: 56, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.textPrimary)
-                    .monospacedDigit()
-                
-                // Microtask text
-                VStack(spacing: 12) {
+
+                VStack(spacing: 14) {
+                    Text(timeString(secondsRemaining))
+                        .font(.fokusDisplay(56))
+                        .foregroundStyle(secondsRemaining == 0 ? Color.textSecondary : Color.textPrimary)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .accessibilityLabel(timeAccessibilityLabel)
+
                     Text(microtask.text)
-                        .font(.title3)
-                        .fontWeight(.medium)
+                        .font(.fokusRounded(.title3, weight: .medium))
                         .foregroundStyle(Color.textPrimary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                    
-                    Text("Just start — only \(microtask.estimatedMinutes) minutes.")
+
+                    Text(secondsRemaining == 0
+                         ? "Time's up. Either way, you win something."
+                         : nudgeLine)
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
-                
+
                 Spacer()
-                
-                // Action buttons
-                VStack(spacing: 16) {
-                    // Done button (accent color - primary action)
+
+                VStack(spacing: 14) {
                     Button {
-                        completeTask(ranOutOfTime: false)
+                        complete(.done)
                     } label: {
                         Text("Done")
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Color.bg)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                Capsule()
-                                    .fill(Color.accent)
-                            )
-                            .shadow(color: .accent.opacity(0.3), radius: 12, x: 0, y: 6)
+                            .fokusPrimaryCapsule()
                     }
-                    
-                    // Ran out of time button (quiet)
+                    .accessibilityHint("Completes this step and collects your reward")
+
                     Button {
-                        completeTask(ranOutOfTime: true)
+                        complete(.ranOutOfTime)
                     } label: {
                         Text("Ran out of time")
                             .font(.subheadline)
                             .foregroundStyle(Color.textSecondary)
+                            .padding(.vertical, 6)
                     }
+                    .accessibilityHint("Still counts. Awards 5 XP and keeps the step available")
                 }
                 .padding(.horizontal, Layout.screenPadding)
-                .padding(.bottom, 32)
+                .padding(.bottom, 24)
+            }
+
+            if let result = rewardResult {
+                RewardSequenceView(
+                    result: result,
+                    xpAfter: appState.currentXP,
+                    orbLevel: appState.currentLevel,
+                    orbSkin: .named(appState.profile.selectedSkin)
+                ) {
+                    dismiss()
+                }
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(isTimerRunning)
         .toolbar {
-            if !isTimerRunning {
-                ToolbarItem(placement: .cancellationAction) {
+            ToolbarItem(placement: .cancellationAction) {
+                if rewardResult == nil {
                     Button {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
                             .foregroundStyle(Color.textSecondary)
                     }
+                    .accessibilityLabel("Leave without finishing")
                 }
             }
         }
-        .onAppear {
-            startTimer()
-        }
-        .onDisappear {
-            isTimerRunning = false
-        }
+        .navigationBarBackButtonHidden(true)
+        .onAppear { startTimer() }
+        .onDisappear { timerRunning = false }
     }
-    
+
+    // MARK: Timer
+
     private func startTimer() {
-        isTimerRunning = true
-        
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            guard isTimerRunning else {
-                timer.invalidate()
-                return
-            }
-            
-            if timeRemaining > 0 {
-                timeRemaining -= 1
-            } else {
-                timer.invalidate()
-                isTimerRunning = false
-            }
-        }
-    }
-    
-    private func completeTask(ranOutOfTime: Bool) {
-        let elapsedTime = microtask.estimatedMinutes - (timeRemaining / 60)
-        let actualMinutes = max(1, elapsedTime)
-        
-        // Award XP: +10 for completion, +5 for running out of time
+        guard !timerRunning else { return }
+        timerRunning = true
         Task {
-            do {
-                try await appState.completeMicrotask(
-                    taskId: task.id,
-                    microtaskId: microtask.id,
-                    actualMinutes: actualMinutes
-                )
-                
-                // Show brief success feedback
-                await MainActor.run {
-                    withAnimation(.fokusSpring) {
-                        showingCompletion = true
+            while timerRunning && secondsRemaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if timerRunning && secondsRemaining > 0 {
+                    withAnimation(.linear(duration: 0.2)) {
+                        secondsRemaining -= 1
                     }
                 }
-                
-                // Dismiss after a brief moment
-                try await Task.sleep(nanoseconds: 500_000_000)
-                await MainActor.run {
-                    dismiss()
-                }
-            } catch {
-                print("Failed to complete microtask: \(error)")
             }
+            timerRunning = false
         }
     }
+
+    // MARK: Completion
+
+    private func complete(_ outcome: CompletionOutcome) {
+        guard rewardResult == nil else { return }
+        timerRunning = false
+
+        let elapsedMinutes = max(1, microtask.estimatedMinutes - secondsRemaining / 60)
+        let result = appState.completeMicrotask(
+            taskId: taskID,
+            microtaskId: microtask.id,
+            outcome: outcome,
+            actualMinutes: elapsedMinutes
+        )
+
+        if outcome == .done {
+            Haptics.success()
+            SoundPlayer.playCompletion(appState.profile.selectedSound)
+        } else {
+            Haptics.light()
+        }
+
+        withAnimation(.fokusCelebration) {
+            rewardResult = result
+        }
     }
-    
-    private func timeString(from seconds: Int) -> String {
-        let minutes = seconds / 60
-        let remainingSeconds = seconds % 60
-        return String(format: "%d:%02d", minutes, remainingSeconds)
+
+    private func timeString(_ seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private var timeAccessibilityLabel: String {
+        let minutes = secondsRemaining / 60
+        let seconds = secondsRemaining % 60
+        return "\(minutes) minutes \(seconds) seconds remaining"
     }
 }
 
 #Preview {
-    NavigationStack {
+    let state = AppState()
+    state.tasks = MockData.sampleTasks
+    return NavigationStack {
         MicrotaskFocusView(
-            task: MockData.sampleTasks[0],
-            microtask: MockData.sampleTasks[0].microtasks[2],
-            appState: AppState()
+            taskID: MockData.sampleTasks[0].id,
+            microtask: MockData.sampleTasks[0].microtasks[2]
         )
+        .environment(state)
     }
 }

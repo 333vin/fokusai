@@ -2,46 +2,38 @@
 //  ContentView.swift
 //  fokusai
 //
-//  Created by Navneet Sharma on 2026-07-13.
+//  Root flow: splash → interactive tutorial (first run) → Home.
+//  Auth is out of scope for the frontend rework; the tutorial replaces it.
 //
 
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AppState.self) private var appState
     @State private var showingSplash = true
-    @State private var isAuthenticated = SupabaseService.shared.isAuthenticated
-    
+
     var body: some View {
         ZStack {
             if showingSplash {
                 SplashView {
-                    showingSplash = false
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        showingSplash = false
+                    }
                 }
                 .transition(.opacity)
-            } else {
-                if isAuthenticated {
-                    HomeView()
-                        .transition(.opacity)
-                } else {
-                    AuthView {
-                        withAnimation(.fokusSpring) {
-                            isAuthenticated = true
-                        }
-                    }
+            } else if !appState.hasCompletedTutorial {
+                TutorialView()
                     .transition(.opacity)
-                }
+            } else {
+                HomeView()
+                    .transition(.opacity)
             }
         }
-        .onAppear {
-            // Listen for auth state changes
-            Task {
-                await SupabaseService.shared.checkSession()
-                isAuthenticated = SupabaseService.shared.isAuthenticated
-            }
-        }
+        .animation(.easeInOut(duration: 0.4), value: appState.hasCompletedTutorial)
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AppState())
 }

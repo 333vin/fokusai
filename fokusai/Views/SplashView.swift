@@ -18,7 +18,7 @@ struct SplashView: View {
     
     var body: some View {
         ZStack {
-            Color.bg.ignoresSafeArea()
+            Color.bgDeep.ignoresSafeArea()
             
             VStack(spacing: 40) {
                 Spacer()
@@ -31,7 +31,7 @@ struct SplashView: View {
                             RadialGradient(
                                 colors: [
                                     Color.brand.opacity(orbGlow * 0.3),
-                                    Color.accent.opacity(orbGlow * 0.1),
+                                    Color.focus.opacity(orbGlow * 0.1),
                                     Color.clear
                                 ],
                                 center: .center,

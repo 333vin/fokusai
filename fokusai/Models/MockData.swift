@@ -8,8 +8,8 @@
 import Foundation
 
 enum MockData {
-    static let sampleTasks: [Task] = [
-        Task(
+    static let sampleTasks: [TaskItem] = [
+        TaskItem(
             title: "Write history essay on the Cold War",
             taskType: "essay",
             createdAt: Date().addingTimeInterval(-3600),
@@ -22,18 +22,18 @@ enum MockData {
                 Microtask(orderIndex: 5, text: "Find one quote from the textbook about that event", estimatedMinutes: 5, status: .todo)
             ]
         ),
-        Task(
+        TaskItem(
             title: "Clean my room",
             taskType: "chore",
             createdAt: Date().addingTimeInterval(-7200),
             status: .active,
             microtasks: [
                 Microtask(orderIndex: 1, text: "Pick up 5 things from the floor and put them away", estimatedMinutes: 2, status: .todo),
-                Microtask(orderIndex: 2, text: "Make your bed—just pull the blanket up", estimatedMinutes: 2, status: .todo),
+                Microtask(orderIndex: 2, text: "Make your bed. Just pull the blanket up", estimatedMinutes: 2, status: .todo),
                 Microtask(orderIndex: 3, text: "Clear everything off your desk into one pile", estimatedMinutes: 3, status: .todo)
             ]
         ),
-        Task(
+        TaskItem(
             title: "Study for biology quiz on cells",
             taskType: "test_study",
             createdAt: Date().addingTimeInterval(-86400),

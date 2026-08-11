@@ -42,11 +42,12 @@ struct BrandLogo: View {
     var body: some View {
         Text("FokusAI")
             .font(.system(size: size.fontSize, weight: .light, design: .rounded))
+            .accessibilityLabel("FokusAI")
             .tracking(size.tracking)
             .foregroundStyle(
                 showGradient ?
                     AnyShapeStyle(LinearGradient(
-                        colors: [Color.brand, Color.accent],
+                        colors: [Color.brand, Color.focus],
                         startPoint: .leading,
                         endPoint: .trailing
                     )) :
