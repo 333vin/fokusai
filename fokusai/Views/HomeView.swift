@@ -50,7 +50,7 @@ struct HomeView: View {
                             navigateToUpgrades = true
                         }
 
-                        if appState.pendingFreezeNotice || appState.pendingStreakResetNotice {
+                        if appState.pendingFreezeNotice || appState.pendingStreakResetNotice || showDeleteTip {
                             noticeBanner
                         }
 
@@ -65,6 +65,7 @@ struct HomeView: View {
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         Haptics.light()
+                                        appState.markDeleteTipSeen()
                                         withAnimation(.fokusSpring) {
                                             appState.deleteTask(task.id)
                                         }
@@ -145,7 +146,15 @@ struct HomeView: View {
 
     @State private var navigateToUpgrades = false
 
-    // MARK: Warm notices (freeze used / streak reset)
+    // MARK: Warm notices (freeze used / streak reset / delete tip)
+
+    /// Shown once after the tutorial, while the sample task is still around,
+    /// so the user learns the delete gesture on something disposable.
+    private var showDeleteTip: Bool {
+        appState.hasCompletedTutorial
+            && !appState.hasSeenDeleteTip
+            && !appState.activeTasks.isEmpty
+    }
 
     @ViewBuilder
     private var noticeBanner: some View {
@@ -164,6 +173,14 @@ struct HomeView: View {
                 message: Copy.random(.streakReturn)
             ) {
                 appState.pendingStreakResetNotice = false
+            }
+        } else if showDeleteTip {
+            NoticeCard(
+                symbol: "hand.point.left.fill",
+                tint: .brand,
+                message: "Quick tip: swipe left on a task to delete it. That sample essay won't take it personally."
+            ) {
+                appState.markDeleteTipSeen()
             }
         }
     }

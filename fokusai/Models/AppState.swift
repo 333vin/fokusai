@@ -25,6 +25,8 @@ class AppState {
     var pendingFreezeNotice = false
     /// Surfaced once, warmly, after a real streak break.
     var pendingStreakResetNotice = false
+    /// One-time Home tip teaching swipe-to-delete, shown after the tutorial.
+    private(set) var hasSeenDeleteTip: Bool
 
     private let database = DatabaseService()
 
@@ -34,6 +36,7 @@ class AppState {
         static let tasks = "fokusai.tasks"
         static let achievements = "fokusai.achievements"
         static let tutorialDone = "fokusai.tutorialDone"
+        static let deleteTipSeen = "fokusai.deleteTipSeen"
     }
 
     // MARK: - Init / persistence
@@ -60,6 +63,7 @@ class AppState {
         }
         unlockedAchievementIDs = Set(defaults.stringArray(forKey: Keys.achievements) ?? [])
         hasCompletedTutorial = defaults.bool(forKey: Keys.tutorialDone)
+        hasSeenDeleteTip = defaults.bool(forKey: Keys.deleteTipSeen)
     }
 
     private func persist() {
@@ -75,6 +79,7 @@ class AppState {
         }
         defaults.set(Array(unlockedAchievementIDs), forKey: Keys.achievements)
         defaults.set(hasCompletedTutorial, forKey: Keys.tutorialDone)
+        defaults.set(hasSeenDeleteTip, forKey: Keys.deleteTipSeen)
 
         let snapshot = profile
         Task { try? await database.updateProfile(snapshot) }
@@ -113,6 +118,14 @@ class AppState {
 
     func task(withID id: UUID) -> TaskItem? {
         tasks.first { $0.id == id }
+    }
+
+    /// Called when the user dismisses the delete tip or proves they know the
+    /// gesture by actually deleting a task from Home.
+    func markDeleteTipSeen() {
+        guard !hasSeenDeleteTip else { return }
+        hasSeenDeleteTip = true
+        persist()
     }
 
     // MARK: - The completion moment (gamification engine)
@@ -337,12 +350,14 @@ class AppState {
         defaults.removeObject(forKey: Keys.tasks)
         defaults.removeObject(forKey: Keys.achievements)
         defaults.removeObject(forKey: Keys.tutorialDone)
+        defaults.removeObject(forKey: Keys.deleteTipSeen)
 
         tasks = []
         profile = Profile(id: UUID(), createdAt: Date())
         stats = PlayerStats()
         unlockedAchievementIDs = []
         hasCompletedTutorial = false
+        hasSeenDeleteTip = false
         pendingFreezeNotice = false
         pendingStreakResetNotice = false
     }
