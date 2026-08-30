@@ -3,7 +3,8 @@
 //  fokusai
 //
 //  Profile & settings: level, XP, streaks (longest preserved separately),
-//  freezes, achievements, daily reminder, tutorial replay, mock sign-out.
+//  freezes, daily reminder, tutorial replay, mock sign-out.
+//  Achievements live in their own tab (AchievementsView).
 //
 
 import SwiftUI
@@ -44,7 +45,6 @@ struct SettingsView: View {
                 VStack(spacing: Layout.cardSpacing) {
                     profileHeader
                     statsCard
-                    achievementsCard
                     reminderCard
                     actionsCard
                 }
@@ -80,7 +80,9 @@ struct SettingsView: View {
             FocusOrb(
                 state: .dim,
                 level: appState.currentLevel,
-                skin: .named(appState.profile.selectedSkin),
+                core: .named(appState.profile.selectedOrbCore),
+                aura: .named(appState.profile.selectedOrbAura),
+                activity: .idle,
                 size: 90
             )
 
@@ -104,7 +106,7 @@ struct SettingsView: View {
 
     private var statsCard: some View {
         VStack(spacing: 0) {
-            statRow(symbol: "flame.fill", tint: FlameFlair.color(for: appState.profile.selectedFlameFlair),
+            statRow(symbol: "flame.fill", tint: FlameFlair.color(for: appState.profile.selectedAppAccent),
                     title: "Current streak",
                     value: appState.streakCount == 1 ? "1 day" : "\(appState.streakCount) days")
             Divider().overlay(Color.stroke)
@@ -139,46 +141,6 @@ struct SettingsView: View {
         }
         .padding(14)
         .accessibilityElement(children: .combine)
-    }
-
-    private var achievementsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Achievements")
-                .font(.fokusRounded(.headline))
-                .foregroundStyle(Color.textPrimary)
-
-            ForEach(Achievement.all) { achievement in
-                let unlocked = appState.unlockedAchievementIDs.contains(achievement.id)
-                HStack(spacing: 12) {
-                    Image(systemName: achievement.symbol)
-                        .font(.body)
-                        .foregroundStyle(unlocked ? Color.reward : Color.textSecondary)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(achievement.name)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(unlocked ? Color.textPrimary : Color.textSecondary)
-                        Text(achievement.blurb)
-                            .font(.footnote)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                    Spacer()
-                    if unlocked {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.success)
-                    } else {
-                        Text("+\(achievement.xpBonus) XP")
-                            .font(.caption)
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(achievement.name), \(unlocked ? "unlocked" : "locked"). \(achievement.blurb)")
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fokusCard()
     }
 
     private var reminderCard: some View {

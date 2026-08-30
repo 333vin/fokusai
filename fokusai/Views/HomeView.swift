@@ -20,45 +20,79 @@ struct HomeView: View {
             ZStack {
                 AppBackground()
 
-                ScrollView {
-                    VStack(spacing: 20) {
+                List {
+                    Section {
                         // The companion. Awake when something's in motion.
                         FocusOrb(
                             state: appState.activeTasks.isEmpty ? .dim : .pulsing,
                             level: appState.currentLevel,
-                            skin: .named(appState.profile.selectedSkin),
+                            core: .named(appState.profile.selectedOrbCore),
+                            aura: .named(appState.profile.selectedOrbAura),
+                            activity: appState.activeTasks.isEmpty ? .idle : .busy,
                             size: 130
                         )
+                        .buttonTip("Focus Orb", detail: "Your companion. Its little face changes with mood, time of day, and what you just did.")
+                        .frame(maxWidth: .infinity)
                         .padding(.top, -4)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 4, trailing: 0))
 
-                        VStack(spacing: Layout.cardSpacing) {
-                            StatBar(
-                                level: appState.currentLevel,
-                                xpProgress: appState.xpProgress,
-                                xp: appState.currentXP,
-                                streak: appState.streakCount,
-                                flairKey: appState.profile.selectedFlameFlair
-                            ) {
-                                navigateToUpgrades = true
-                            }
+                    Section {
+                        StatBar(
+                            level: appState.currentLevel,
+                            xpProgress: appState.xpProgress,
+                            xp: appState.currentXP,
+                            streak: appState.streakCount,
+                                flairKey: appState.profile.selectedAppAccent
+                        ) {
+                            navigateToUpgrades = true
+                        }
 
+                        if appState.pendingFreezeNotice || appState.pendingStreakResetNotice {
                             noticeBanner
+                        }
 
-                            if appState.activeTasks.isEmpty {
-                                emptyState
-                            } else {
-                                ForEach(appState.activeTasks) { task in
-                                    TaskCard(task: task) {
-                                        selectedTask = task
+                        if appState.activeTasks.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(appState.activeTasks) { task in
+                                TaskCard(task: task) {
+                                    selectedTask = task
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Haptics.light()
+                                        withAnimation(.fokusSpring) {
+                                            appState.deleteTask(task.id)
+                                        }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
                                     }
+                                    .accessibilityLabel("Delete \(task.title)")
                                 }
                             }
                         }
-                        .padding(.horizontal, Layout.screenPadding)
-
-                        Spacer(minLength: 110)
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(
+                        top: Layout.cardSpacing / 2,
+                        leading: Layout.screenPadding,
+                        bottom: Layout.cardSpacing / 2,
+                        trailing: Layout.screenPadding
+                    ))
+
+                    Section {
+                        Color.clear.frame(height: 110)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
 
                 // Floating "+ New task"
                 VStack {
@@ -69,7 +103,7 @@ struct HomeView: View {
                         Label("New task", systemImage: "plus")
                             .fokusPrimaryCapsule()
                     }
-                    .accessibilityHint("Opens a new task to break down")
+                    .buttonTip("New task", detail: "Name something you're putting off. We'll break it into tiny steps.")
                     .padding(.bottom, 24)
                 }
             }
@@ -88,15 +122,6 @@ struct HomeView: View {
                 ToolbarItem(placement: .principal) {
                     BrandLogo(size: .small, showGradient: true)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "person.crop.circle")
-                            .foregroundStyle(Color.textSecondary)
-                    }
-                    .accessibilityLabel("Profile and settings")
-                }
                 #if DEBUG
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink {
@@ -105,6 +130,7 @@ struct HomeView: View {
                         Image(systemName: "circle.hexagongrid.circle")
                             .foregroundStyle(Color.textSecondary)
                     }
+                    .buttonTip("Orb Lab", detail: "Debug playground for orb skins and states.")
                     .accessibilityLabel("Orb Lab (debug)")
                 }
                 #endif

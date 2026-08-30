@@ -104,7 +104,7 @@ struct TutorialView: View {
 
     private var meetOrbBeat: some View {
         VStack(spacing: 32) {
-            FocusOrb(state: .dim, level: 1)
+            FocusOrb(state: .dim, level: 1, activity: .idle)
                 .opacity(orbVisible ? 1 : 0)
 
             Text("This is your Focus Orb.\nIt grows when you do, and waits patiently when you don't.")
@@ -122,7 +122,7 @@ struct TutorialView: View {
 
     private var selfKnowledgeBeat: some View {
         VStack(spacing: 28) {
-            FocusOrb(state: .dim, level: 1, size: 100)
+            FocusOrb(state: .dim, level: 1, activity: .idle, size: 100)
 
             Text("What do you put off the most?")
                 .font(.fokusRounded(.title2))
@@ -176,7 +176,7 @@ struct TutorialView: View {
 
             if isDecomposing {
                 VStack(spacing: 20) {
-                    FocusOrb(state: .pulsing, level: 1, size: 110)
+                    FocusOrb(state: .pulsing, level: 1, activity: .thinking, size: 110)
                     RotatingCopyLine(lines: Copy.all(.decompositionLoading), interval: 1.2)
                 }
                 .padding(.top, 12)
@@ -268,7 +268,12 @@ struct TutorialView: View {
     private var rewardBeat: some View {
         VStack(spacing: 24) {
             ZStack {
-                FocusOrb(state: stepDone ? .flare : .pulsing, level: 1, size: 120)
+                FocusOrb(
+                    state: stepDone ? .flare : .pulsing,
+                    level: 1,
+                    activity: stepDone ? .celebrating : .focusing,
+                    size: 120
+                )
                 if showConfetti {
                     ConfettiBurst()
                         .frame(width: 280, height: 280)
@@ -369,14 +374,14 @@ struct TutorialView: View {
 
     private var worldBeat: some View {
         VStack(spacing: 28) {
-            FocusOrb(state: .dim, level: appState.currentLevel, size: 100)
+            FocusOrb(state: .dim, level: appState.currentLevel, activity: .busy, size: 100)
 
             StatBar(
                 level: appState.currentLevel,
                 xpProgress: appState.xpProgress,
                 xp: appState.currentXP,
                 streak: max(appState.streakCount, isReplay ? 1 : 0),
-                flairKey: appState.profile.selectedFlameFlair
+                flairKey: appState.profile.selectedAppAccent
             )
 
             VStack(spacing: 14) {

@@ -36,7 +36,9 @@ struct MicrotaskFocusView: View {
                 FocusOrb(
                     state: rewardResult != nil ? .flare : (timerRunning ? .pulsing : .dim),
                     level: appState.currentLevel,
-                    skin: .named(appState.profile.selectedSkin),
+                    core: .named(appState.profile.selectedOrbCore),
+                    aura: .named(appState.profile.selectedOrbAura),
+                    activity: focusOrbActivity,
                     size: 130
                 )
 
@@ -73,7 +75,7 @@ struct MicrotaskFocusView: View {
                             .frame(maxWidth: .infinity)
                             .fokusPrimaryCapsule()
                     }
-                    .accessibilityHint("Completes this step and collects your reward")
+                    .buttonTip("Done", detail: "You finished the step. Collect XP and keep the streak going.")
 
                     Button {
                         complete(.ranOutOfTime)
@@ -83,7 +85,7 @@ struct MicrotaskFocusView: View {
                             .foregroundStyle(Color.textSecondary)
                             .padding(.vertical, 6)
                     }
-                    .accessibilityHint("Still counts. Awards 5 XP and keeps the step available")
+                    .buttonTip("Ran out of time", detail: "Still counts as showing up. Awards a little XP and leaves the step open.")
                 }
                 .padding(.horizontal, Layout.screenPadding)
                 .padding(.bottom, 24)
@@ -94,7 +96,9 @@ struct MicrotaskFocusView: View {
                     result: result,
                     xpAfter: appState.currentXP,
                     orbLevel: appState.currentLevel,
-                    orbSkin: .named(appState.profile.selectedSkin)
+                    orbCore: .named(appState.profile.selectedOrbCore),
+                    orbAura: .named(appState.profile.selectedOrbAura),
+                    trailKey: appState.profile.selectedTrail
                 ) {
                     dismiss()
                 }
@@ -119,6 +123,13 @@ struct MicrotaskFocusView: View {
         .navigationBarBackButtonHidden(true)
         .onAppear { startTimer() }
         .onDisappear { timerRunning = false }
+    }
+
+    private var focusOrbActivity: OrbActivity {
+        if let rewardResult {
+            return rewardResult.outcome == .done ? .celebrating : .softWin
+        }
+        return timerRunning ? .focusing : .neutral
     }
 
     // MARK: Timer
@@ -155,7 +166,7 @@ struct MicrotaskFocusView: View {
 
         if outcome == .done {
             Haptics.success()
-            SoundPlayer.playCompletion(appState.profile.selectedSound)
+            SoundPlayer.playCompletion("chime")
         } else {
             Haptics.light()
         }

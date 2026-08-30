@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  fokusai
 //
-//  Root flow: splash → interactive tutorial (first run) → Home.
+//  Root flow: splash → interactive tutorial (first run) → main tabs.
 //  Auth is out of scope for the frontend rework; the tutorial replaces it.
 //
 
@@ -25,7 +25,7 @@ struct ContentView: View {
                 TutorialView()
                     .transition(.opacity)
             } else {
-                HomeView()
+                MainTabView()
                     .transition(.opacity)
             }
         }

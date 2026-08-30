@@ -2,24 +2,30 @@
 //  OrbLabView.swift
 //  fokusai
 //
-//  Dev-only preview screen that exercises all FocusOrb states, levels, and
-//  skins. Reachable from Home via a DEBUG-only toolbar button.
+//  DEBUG playground for orb state / activity / level. Core + aura colors
+//  always match what's currently equipped in the player's Orb Lab.
 //
 
 import SwiftUI
 
 struct OrbLabView: View {
-    @State private var orbState: OrbState = .dim
-    @State private var level = 1
-    @State private var skin: OrbSkin = .deepFocus
+    @Environment(AppState.self) private var appState
 
-    /// Test palettes so skin swapping can be exercised before Phase 7 ships
-    /// real unlockables.
-    private static let testSkins: [OrbSkin] = [
-        .deepFocus,
-        OrbSkin(key: "test_ember", name: "Ember (test)", core: .brandDeep, mid: .reward, rim: .focus),
-        OrbSkin(key: "test_mint", name: "Mint (test)", core: .brandDeep, mid: .success, rim: .focus),
-    ]
+    @State private var orbState: OrbState = .dim
+    @State private var activity: OrbActivity = .neutral
+    @State private var level = 1
+
+    private var equippedCore: OrbCoreStyle {
+        .named(appState.profile.selectedOrbCore)
+    }
+
+    private var equippedAura: OrbAuraStyle {
+        .named(appState.profile.selectedOrbAura)
+    }
+
+    private var previewFace: String {
+        OrbFace.glyph(state: orbState, activity: activity)
+    }
 
     var body: some View {
         ZStack {
@@ -28,15 +34,33 @@ struct OrbLabView: View {
             VStack(spacing: 24) {
                 Spacer()
 
-                FocusOrb(state: orbState, level: level, skin: skin)
+                FocusOrb(
+                    state: orbState,
+                    level: level,
+                    core: equippedCore,
+                    aura: equippedAura,
+                    activity: activity
+                )
+
+                VStack(spacing: 4) {
+                    Text(previewFace)
+                        .font(.fokusDisplay(28))
+                        .foregroundStyle(Color.textPrimary)
+                    Text("\(equippedCore.name) · \(equippedAura.name)")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
 
                 Spacer()
 
                 controls
             }
         }
-        .navigationTitle("Orb Lab")
+        .navigationTitle("Orb Debug")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            level = appState.currentLevel
+        }
     }
 
     private var controls: some View {
@@ -45,6 +69,17 @@ struct OrbLabView: View {
                 Text("Dim").tag(OrbState.dim)
                 Text("Pulsing").tag(OrbState.pulsing)
                 Text("Flare").tag(OrbState.flare)
+            }
+            .pickerStyle(.segmented)
+
+            Picker("Activity", selection: $activity) {
+                Text("Neutral").tag(OrbActivity.neutral)
+                Text("Idle").tag(OrbActivity.idle)
+                Text("Busy").tag(OrbActivity.busy)
+                Text("Focus").tag(OrbActivity.focusing)
+                Text("Think").tag(OrbActivity.thinking)
+                Text("Win").tag(OrbActivity.celebrating)
+                Text("Soft").tag(OrbActivity.softWin)
             }
             .pickerStyle(.segmented)
 
@@ -58,49 +93,36 @@ struct OrbLabView: View {
                         get: { Double(level) },
                         set: { level = Int($0) }
                     ),
-                    in: 1...10, step: 1
+                    in: 1...20, step: 1
                 )
                 .tint(.brand)
             }
 
-            Picker("Skin", selection: $skin) {
-                ForEach(Self.testSkins) { testSkin in
-                    Text(testSkin.name).tag(testSkin)
-                }
-            }
-            .pickerStyle(.segmented)
+            Text("Core & aura follow your equipped Orb Lab cosmetics.")
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Button("Replay flare") {
                 orbState = .dim
                 Task {
                     try? await Task.sleep(for: .milliseconds(80))
                     orbState = .flare
+                    activity = .celebrating
                 }
             }
             .font(.fokusRounded(.subheadline))
             .foregroundStyle(Color.focus)
         }
         .padding(Layout.screenPadding)
-        .background(
-            RoundedRectangle(cornerRadius: Layout.cardRadius)
-                .fill(Color.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Layout.cardRadius)
-                        .stroke(Color.stroke, lineWidth: 1)
-                )
-        )
+        .fokusCard()
         .padding(Layout.screenPadding)
-    }
-}
-
-extension OrbSkin: Hashable {
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(key)
     }
 }
 
 #Preview {
     NavigationStack {
         OrbLabView()
+            .environment(AppState())
     }
 }

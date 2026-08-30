@@ -29,6 +29,7 @@
         @State private var photoAttached = false
 
         @State private var isDecomposing = false
+        @State private var titleError: String?
         @FocusState private var titleFocused: Bool
 
         enum TaskFormat: String, CaseIterable {
@@ -83,8 +84,37 @@
                         .fokusCard()
                         .focused($titleFocused)
                         .onAppear { titleFocused = true }
+                        .onChange(of: taskTitle) { _, _ in
+                            if titleError != nil { titleError = nil }
+                        }
+
+                    if let titleError {
+                        Text(titleError)
+                            .font(.footnote)
+                            .foregroundStyle(Color.reward)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(titleError)
+                    }
 
                     detailsDisclosure
+                        .onChange(of: showingDetails) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
+                        .onChange(of: scope) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
+                        .onChange(of: notes) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
+                        .onChange(of: photoAttached) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
+                        .onChange(of: taskFormat) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
+                        .onChange(of: hasDeadline) { _, _ in
+                            if titleError != nil && hasExtraContext { titleError = nil }
+                        }
 
                     Spacer(minLength: 80)
                 }
@@ -92,13 +122,14 @@
             }
             .safeAreaInset(edge: .bottom) {
                 Button {
-                    startDecomposition()
-                } label: {
-                    Label("Break it down", systemImage: "wand.and.stars")
-                        .frame(maxWidth: .infinity)
-                        .fokusPrimaryCapsule(disabled: trimmedTitle.isEmpty)
-                }
-                .disabled(trimmedTitle.isEmpty)
+                startDecomposition()
+            } label: {
+                Label("Break it down", systemImage: "wand.and.stars")
+                    .frame(maxWidth: .infinity)
+                    .fokusPrimaryCapsule(disabled: trimmedTitle.isEmpty)
+            }
+            .buttonTip("Break it down", detail: "Sends your task to AI (or a local template offline) and turns it into tiny steps.")
+            .disabled(trimmedTitle.isEmpty)
                 .padding(.horizontal, Layout.screenPadding)
                 .padding(.bottom, 12)
             }
@@ -106,6 +137,44 @@
 
         private var trimmedTitle: String {
             taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        /// Any optional context that can rescue a cryptic title.
+        private var hasExtraContext: Bool {
+            hasDeadline
+                || taskFormat != .other
+                || !scope.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || photoAttached
+        }
+
+        /// Heuristic: keyboard smash / vowel-starved nonsense with nothing else to go on.
+        private func looksLikeGibberish(_ title: String) -> Bool {
+            let compact = title.lowercased().filter { !$0.isWhitespace }
+            let letters = compact.filter(\.isLetter)
+            guard letters.count >= 3 else {
+                // Tiny non-words like "??" or "x" need detail to mean anything.
+                return compact.count >= 2 && letters.count < 2
+            }
+
+            let smashTokens = ["asdf", "qwer", "zxcv", "hjkl", "qwerty", "asdfgh", "xxx", "aaaa", "bbbb"]
+            if smashTokens.contains(where: { compact.contains($0) }) { return true }
+
+            if Set(letters).count == 1 { return true }
+
+            let vowels = letters.filter { "aeiouy".contains($0) }.count
+            let vowelRatio = Double(vowels) / Double(letters.count)
+            let letterRatio = Double(letters.count) / Double(max(compact.count, 1))
+
+            // Mostly symbols/numbers.
+            if letterRatio < 0.5 && compact.count >= 4 { return true }
+
+            // Single mashed token with almost no vowels (e.g. "bcdfghk").
+            let isSingleToken = !title.contains(where: \.isWhitespace)
+            if isSingleToken && letters.count >= 4 && vowelRatio < 0.18 { return true }
+            if isSingleToken && letters.count >= 6 && vowelRatio < 0.25 { return true }
+
+            return false
         }
 
         private var detailsDisclosure: some View {
@@ -206,12 +275,14 @@
         private var decompositionLoading: some View {
             VStack(spacing: 28) {
                 Spacer()
-                FocusOrb(
-                    state: .pulsing,
-                    level: appState.currentLevel,
-                    skin: .named(appState.profile.selectedSkin),
-                    size: 130
-                )
+            FocusOrb(
+                state: .pulsing,
+                level: appState.currentLevel,
+                core: .named(appState.profile.selectedOrbCore),
+                aura: .named(appState.profile.selectedOrbAura),
+                activity: .thinking,
+                size: 130
+            )
                 RotatingCopyLine(lines: Copy.all(.decompositionLoading).shuffled(), interval: 1.2)
                     .padding(.horizontal, 40)
                 Spacer()
@@ -223,6 +294,17 @@
 
         private func startDecomposition() {
             titleFocused = false
+
+            // Gibberish title + no details → ask for something we can work with.
+            if looksLikeGibberish(trimmedTitle) && !hasExtraContext {
+                withAnimation(.fokusSpring) {
+                    titleError = "That name looks like keyboard spaghetti. Give it a real label, or add a detail so we know what you mean."
+                }
+                Haptics.light()
+                return
+            }
+
+            titleError = nil
             withAnimation(.fokusSpring) { isDecomposing = true }
             Haptics.light()
 

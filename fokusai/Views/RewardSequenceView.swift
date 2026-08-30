@@ -13,7 +13,9 @@ import SwiftUI
 struct RewardSequenceView: View {
     let result: RewardResult
     let orbLevel: Int
-    let orbSkin: OrbSkin
+    let orbCore: OrbCoreStyle
+    let orbAura: OrbAuraStyle
+    let trailKey: String
     let onFinish: () -> Void
 
     private enum Stage: Int, Equatable {
@@ -36,11 +38,21 @@ struct RewardSequenceView: View {
     private var xpAfter: Int { _xpAfter }
     private let _xpAfter: Int
 
-    init(result: RewardResult, xpAfter: Int, orbLevel: Int, orbSkin: OrbSkin, onFinish: @escaping () -> Void) {
+    init(
+        result: RewardResult,
+        xpAfter: Int,
+        orbLevel: Int,
+        orbCore: OrbCoreStyle = .default,
+        orbAura: OrbAuraStyle = .soft,
+        trailKey: String = "sparkle",
+        onFinish: @escaping () -> Void
+    ) {
         self.result = result
         self._xpAfter = xpAfter
         self.orbLevel = orbLevel
-        self.orbSkin = orbSkin
+        self.orbCore = orbCore
+        self.orbAura = orbAura
+        self.trailKey = trailKey
         self.onFinish = onFinish
     }
 
@@ -116,11 +128,13 @@ struct RewardSequenceView: View {
                 FocusOrb(
                     state: result.outcome == .done ? .flare : .pulsing,
                     level: orbLevel,
-                    skin: orbSkin,
+                    core: orbCore,
+                    aura: orbAura,
+                    activity: result.outcome == .done ? .celebrating : .softWin,
                     size: 120
                 )
                 if result.outcome == .done {
-                    ConfettiBurst(colors: [.focus, .brand, .textPrimary])
+                    TrailEffect(key: trailKey, rim: orbCore.rim)
                         .frame(width: 300, height: 300)
                 }
             }
@@ -198,8 +212,15 @@ struct RewardSequenceView: View {
     private var levelUpStage: some View {
         VStack(spacing: 24) {
             ZStack {
-                FocusOrb(state: .flare, level: result.leveledUpTo ?? orbLevel, skin: orbSkin, size: 150)
-                ConfettiBurst(colors: [.reward, .reward, .focus, .textPrimary], particleCount: 44)
+                FocusOrb(
+                    state: .flare,
+                    level: result.leveledUpTo ?? orbLevel,
+                    core: orbCore,
+                    aura: orbAura,
+                    activity: .celebrating,
+                    size: 150
+                )
+                TrailEffect(key: trailKey, rim: .reward)
                     .frame(width: 340, height: 340)
             }
 
@@ -313,6 +334,8 @@ struct RewardSequenceView: View {
         ),
         xpAfter: 160,
         orbLevel: 3,
-        orbSkin: .deepFocus
+        orbCore: .ember,
+        orbAura: .sparks,
+        trailKey: "nova"
     ) {}
 }

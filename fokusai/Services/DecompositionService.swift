@@ -2,15 +2,10 @@
 //  DecompositionService.swift
 //  fokusai
 //
-//  Tries the real AI Edge Function first; falls back to the local template
-//  if the network or function fails, so the user is never left stuck.
-//
 
 import Foundation
 
 enum DecompositionService {
-
-    // MARK: - Public API (now async)
 
     static func decompose(
         title: String,
@@ -24,12 +19,12 @@ enum DecompositionService {
                 timeAvailableMinutes: timeAvailableMinutes, multiplier: multiplier
             )
         } catch {
-            // Offline or function error — fall back to the local template.
+            print("⚠️ DECOMPOSE remote failed → using template. Reason:", error)
             return localDecompose(title: title, format: format)
         }
     }
 
-    // MARK: - Remote (Edge Function)
+    // MARK: - Remote
 
     private struct RequestBody: Encodable {
         struct Task: Encodable { let title: String; let context: Context }
@@ -68,7 +63,12 @@ enum DecompositionService {
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard http.statusCode == 200 else {
+            let bodyText = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("⚠️ DECOMPOSE status \(http.statusCode): \(bodyText)")
             throw URLError(.badServerResponse)
         }
         let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
@@ -79,7 +79,7 @@ enum DecompositionService {
             .map { Microtask(orderIndex: $0.order, text: $0.text, estimatedMinutes: $0.estimated_minutes) }
     }
 
-    // MARK: - Local fallback (your original template, unchanged)
+    // MARK: - Local fallback
 
     private struct Step { let text: String; let minutes: Int }
 

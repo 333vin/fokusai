@@ -43,7 +43,7 @@ struct SplashView: View {
                         .blur(radius: 20)
                     
                     // The orb itself
-                    FocusOrb(state: .flare, level: 3)
+                    FocusOrb(state: .flare, level: 3, activity: .celebrating)
                         .scaleEffect(orbScale)
                 }
                 .opacity(orbOpacity)

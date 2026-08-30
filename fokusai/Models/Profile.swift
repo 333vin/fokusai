@@ -3,6 +3,7 @@
 //  fokusai
 //
 //  Maps to the planned backend `profiles`, `upgrades`, and `user_upgrades` tables.
+//  Cosmetic slots: orbCore, orbAura, trail, appAccent — local UserDefaults for now.
 //
 
 import Foundation
@@ -18,13 +19,12 @@ struct Profile: Codable {
     var lastActiveDate: Date?
     var freezesAvailable: Int
     var procrastinationType: String?
-    var selectedTheme: String
-    /// Gamification extension (schema-compatible addition): active orb skin.
-    var selectedSkin: String
-    /// Gamification extension: active streak-flame flair.
-    var selectedFlameFlair: String
-    /// Gamification extension: completion sound choice.
-    var selectedSound: String
+
+    // MARK: Cosmetic slots (equipped item keys)
+    var selectedOrbCore: String
+    var selectedOrbAura: String
+    var selectedTrail: String
+    var selectedAppAccent: String
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -36,6 +36,11 @@ struct Profile: Codable {
         case lastActiveDate = "last_active_date"
         case freezesAvailable = "freezes_available"
         case procrastinationType = "procrastination_type"
+        case selectedOrbCore = "selected_orb_core"
+        case selectedOrbAura = "selected_orb_aura"
+        case selectedTrail = "selected_trail"
+        case selectedAppAccent = "selected_app_accent"
+        // Legacy keys (read-only migration)
         case selectedTheme = "selected_theme"
         case selectedSkin = "selected_skin"
         case selectedFlameFlair = "selected_flame_flair"
@@ -53,10 +58,10 @@ struct Profile: Codable {
         lastActiveDate: Date? = nil,
         freezesAvailable: Int = 2,
         procrastinationType: String? = nil,
-        selectedTheme: String = "deep_focus",
-        selectedSkin: String = "deep_focus",
-        selectedFlameFlair: String = "classic",
-        selectedSound: String = "chime"
+        selectedOrbCore: String = "default",
+        selectedOrbAura: String = "soft",
+        selectedTrail: String = "sparkle",
+        selectedAppAccent: String = "midnight"
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -68,10 +73,10 @@ struct Profile: Codable {
         self.lastActiveDate = lastActiveDate
         self.freezesAvailable = freezesAvailable
         self.procrastinationType = procrastinationType
-        self.selectedTheme = selectedTheme
-        self.selectedSkin = selectedSkin
-        self.selectedFlameFlair = selectedFlameFlair
-        self.selectedSound = selectedSound
+        self.selectedOrbCore = selectedOrbCore
+        self.selectedOrbAura = selectedOrbAura
+        self.selectedTrail = selectedTrail
+        self.selectedAppAccent = selectedAppAccent
     }
 
     init(from decoder: Decoder) throws {
@@ -86,10 +91,65 @@ struct Profile: Codable {
         lastActiveDate = try container.decodeIfPresent(Date.self, forKey: .lastActiveDate)
         freezesAvailable = try container.decodeIfPresent(Int.self, forKey: .freezesAvailable) ?? 2
         procrastinationType = try container.decodeIfPresent(String.self, forKey: .procrastinationType)
-        selectedTheme = try container.decodeIfPresent(String.self, forKey: .selectedTheme) ?? "deep_focus"
-        selectedSkin = try container.decodeIfPresent(String.self, forKey: .selectedSkin) ?? "deep_focus"
-        selectedFlameFlair = try container.decodeIfPresent(String.self, forKey: .selectedFlameFlair) ?? "classic"
-        selectedSound = try container.decodeIfPresent(String.self, forKey: .selectedSound) ?? "chime"
+
+        // Prefer new slot keys; fall back to legacy cosmetics when migrating.
+        let legacySkin = try container.decodeIfPresent(String.self, forKey: .selectedSkin)
+        let legacyTheme = try container.decodeIfPresent(String.self, forKey: .selectedTheme)
+
+        selectedOrbCore = try container.decodeIfPresent(String.self, forKey: .selectedOrbCore)
+            ?? Self.migrateCore(from: legacySkin)
+        selectedOrbAura = try container.decodeIfPresent(String.self, forKey: .selectedOrbAura) ?? "soft"
+        selectedTrail = try container.decodeIfPresent(String.self, forKey: .selectedTrail) ?? "sparkle"
+        selectedAppAccent = try container.decodeIfPresent(String.self, forKey: .selectedAppAccent)
+            ?? Self.migrateAccent(from: legacyTheme)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encode(estimateMultiplier, forKey: .estimateMultiplier)
+        try container.encode(xp, forKey: .xp)
+        try container.encode(level, forKey: .level)
+        try container.encode(streakCount, forKey: .streakCount)
+        try container.encode(longestStreak, forKey: .longestStreak)
+        try container.encodeIfPresent(lastActiveDate, forKey: .lastActiveDate)
+        try container.encode(freezesAvailable, forKey: .freezesAvailable)
+        try container.encodeIfPresent(procrastinationType, forKey: .procrastinationType)
+        try container.encode(selectedOrbCore, forKey: .selectedOrbCore)
+        try container.encode(selectedOrbAura, forKey: .selectedOrbAura)
+        try container.encode(selectedTrail, forKey: .selectedTrail)
+        try container.encode(selectedAppAccent, forKey: .selectedAppAccent)
+    }
+
+    private static func migrateCore(from legacySkin: String?) -> String {
+        switch legacySkin {
+        case "ember_heart": return "ember"
+        case "violet_drift": return "nebula"
+        case "aurora", "mint_flow": return "aurora"
+        case "deep_focus", .none: return "default"
+        default: return "default"
+        }
+    }
+
+    private static func migrateAccent(from legacyTheme: String?) -> String {
+        switch legacyTheme {
+        case "violet_night": return "violet"
+        case "abyss_teal": return "teal"
+        case "ember_glow": return "ember_glow"
+        case "deep_focus", .none: return "midnight"
+        default: return "midnight"
+        }
+    }
+
+    /// Currently equipped key for a slot.
+    func equippedKey(for slot: CosmeticSlot) -> String {
+        switch slot {
+        case .orbCore: return selectedOrbCore
+        case .orbAura: return selectedOrbAura
+        case .trail: return selectedTrail
+        case .appAccent: return selectedAppAccent
+        }
     }
 }
 

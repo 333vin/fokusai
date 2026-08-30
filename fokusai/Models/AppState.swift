@@ -3,10 +3,9 @@
 //  fokusai
 //
 //  Central observable state + the gamification engine (XP, levels, forgiving
-//  streaks, freezes, Focus Chests, achievements). Everything runs on mock
-//  data: profile/stats persist locally via UserDefaults, tasks live in memory
-//  and mirror into the mock DatabaseService so the backend wiring can swap in
-//  later without touching views.
+//  streaks, freezes, Focus Chests, achievements). Profile, stats, and tasks
+//  all persist locally via UserDefaults. No auth / no user-data backend —
+//  AppState is the source of truth that survives relaunch.
 //
 
 import Foundation
@@ -32,6 +31,7 @@ class AppState {
     private enum Keys {
         static let profile = "fokusai.profile"
         static let stats = "fokusai.stats"
+        static let tasks = "fokusai.tasks"
         static let achievements = "fokusai.achievements"
         static let tutorialDone = "fokusai.tutorialDone"
     }
@@ -52,6 +52,12 @@ class AppState {
         } else {
             stats = PlayerStats()
         }
+        if let data = defaults.data(forKey: Keys.tasks),
+           let saved = try? JSONDecoder().decode([TaskItem].self, from: data) {
+            tasks = saved
+        } else {
+            tasks = []
+        }
         unlockedAchievementIDs = Set(defaults.stringArray(forKey: Keys.achievements) ?? [])
         hasCompletedTutorial = defaults.bool(forKey: Keys.tutorialDone)
     }
@@ -63,6 +69,9 @@ class AppState {
         }
         if let data = try? JSONEncoder().encode(stats) {
             defaults.set(data, forKey: Keys.stats)
+        }
+        if let data = try? JSONEncoder().encode(tasks) {
+            defaults.set(data, forKey: Keys.tasks)
         }
         defaults.set(Array(unlockedAchievementIDs), forKey: Keys.achievements)
         defaults.set(hasCompletedTutorial, forKey: Keys.tutorialDone)
@@ -94,14 +103,12 @@ class AppState {
         var newTask = task
         newTask.userId = profile.id
         tasks.insert(newTask, at: 0)
-
-        let snapshot = newTask
-        Task { _ = try? await database.createTask(snapshot, microtasks: snapshot.microtasks) }
+        persist()
     }
 
     func deleteTask(_ taskId: UUID) {
         tasks.removeAll { $0.id == taskId }
-        Task { try? await database.deleteTask(id: taskId) }
+        persist()
     }
 
     func task(withID id: UUID) -> TaskItem? {
@@ -176,14 +183,9 @@ class AppState {
             result.leveledUpTo = newLevel
         }
 
+        // Tasks (incl. microtask completion / task-done), profile, and stats
+        // all write through here — single local source of truth.
         persist()
-        if outcome == .done {
-            let snapshot = tasks[taskIndex]
-            Task {
-                try? await database.completeMicrotask(id: microtaskId, actualMinutes: actualMinutes)
-                try? await database.updateTask(snapshot)
-            }
-        }
         return result
     }
 
@@ -294,26 +296,36 @@ class AppState {
         persist()
     }
 
-    // MARK: - Customization (Phase 7 applies these live)
+    // MARK: - Cosmetics (four slots)
 
-    func applySkin(_ key: String) {
-        profile.selectedSkin = key
-        persist()
+    /// Whether the user can equip this catalog item at their current level.
+    func isUnlocked(_ item: CosmeticItem) -> Bool {
+        currentLevel >= item.unlockLevel
     }
 
-    func applyTheme(_ key: String) {
-        profile.selectedTheme = key
-        persist()
+    func isUnlocked(slot: CosmeticSlot, key: String) -> Bool {
+        guard let item = CosmeticCatalog.item(slot: slot, key: key) else { return false }
+        return isUnlocked(item)
     }
 
-    func applyFlameFlair(_ key: String) {
-        profile.selectedFlameFlair = key
+    /// Equips an item into its slot if unlocked. Returns whether it applied.
+    @discardableResult
+    func equip(slot: CosmeticSlot, itemKey: String) -> Bool {
+        guard let item = CosmeticCatalog.item(slot: slot, key: itemKey),
+              isUnlocked(item) else { return false }
+
+        switch slot {
+        case .orbCore: profile.selectedOrbCore = itemKey
+        case .orbAura: profile.selectedOrbAura = itemKey
+        case .trail: profile.selectedTrail = itemKey
+        case .appAccent: profile.selectedAppAccent = itemKey
+        }
         persist()
+        return true
     }
 
-    func applySound(_ key: String) {
-        profile.selectedSound = key
-        persist()
+    func equippedKey(for slot: CosmeticSlot) -> String {
+        profile.equippedKey(for: slot)
     }
 
     // MARK: - Reset (mock sign-out)
@@ -322,6 +334,7 @@ class AppState {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: Keys.profile)
         defaults.removeObject(forKey: Keys.stats)
+        defaults.removeObject(forKey: Keys.tasks)
         defaults.removeObject(forKey: Keys.achievements)
         defaults.removeObject(forKey: Keys.tutorialDone)
 
@@ -340,6 +353,7 @@ class AppState {
         for task in MockData.sampleTasks where !tasks.contains(where: { $0.id == task.id }) {
             tasks.append(task)
         }
+        persist()
     }
     #endif
 }

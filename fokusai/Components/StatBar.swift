@@ -47,7 +47,7 @@ struct XPRing: View {
 
 struct StreakFlame: View {
     let count: Int
-    var flairKey: String = "classic"
+    var flairKey: String = "midnight"
 
     private var flameColor: Color {
         count > 0 ? FlameFlair.color(for: flairKey) : .textSecondary
@@ -75,26 +75,30 @@ struct StatBar: View {
     let xpProgress: Double
     let xp: Int
     let streak: Int
-    var flairKey: String = "classic"
+    var flairKey: String = "midnight"
     var onTapUpgrades: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 14) {
-            XPRing(level: level, progress: xpProgress)
+            HStack(spacing: 14) {
+                XPRing(level: level, progress: xpProgress)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Level \(level)")
-                    .font(.fokusRounded(.subheadline))
-                    .foregroundStyle(Color.textPrimary)
-                Text("\(xp) XP")
-                    .font(.footnote)
-                    .foregroundStyle(Color.textSecondary)
-                    .contentTransition(.numericText())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Level \(level)")
+                        .font(.fokusRounded(.subheadline))
+                        .foregroundStyle(Color.textPrimary)
+                    Text("\(xp) XP")
+                        .font(.footnote)
+                        .foregroundStyle(Color.textSecondary)
+                        .contentTransition(.numericText())
+                }
             }
+            .buttonTip("Level & XP", detail: "Your level and progress ring. Every tiny step feeds it.")
 
             Spacer()
 
             StreakFlame(count: streak, flairKey: flairKey)
+                .buttonTip("Streak", detail: "Days in a row with at least one completed step. Miss a day and a freeze can save it.")
 
             if let onTapUpgrades {
                 Button(action: onTapUpgrades) {
@@ -104,6 +108,7 @@ struct StatBar: View {
                         .padding(10)
                         .background(Circle().fill(Color.surfaceRaised))
                 }
+                .buttonTip("Upgrades", detail: "Unlock new looks for your orb and flame as you level up.")
                 .accessibilityLabel("Upgrades")
             }
         }
