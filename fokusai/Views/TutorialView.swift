@@ -2,9 +2,10 @@
 //  TutorialView.swift
 //  fokusai
 //
-//  The interactive first-run tutorial: five beats, canned data, under 90
-//  seconds. The user meets the orb, sees a decomposition, completes a real
-//  microtask, feels the reward, and lands on Home with XP and a streak.
+//  The interactive first-run tutorial: six short beats, under 90 seconds.
+//  The user meets the orb, sees a decomposition (of the sample task or their
+//  own), completes a real microtask, feels the reward, gets a peek at orb
+//  cosmetics, and lands on Home with XP and a streak.
 //  Skippable; replayable from Settings (replay never re-awards XP).
 //
 
@@ -16,11 +17,12 @@ struct TutorialView: View {
     var onFinish: (() -> Void)?
 
     private enum Beat: Int, Comparable {
-        case meetOrb, selfKnowledge, magic, reward, world
+        case meetOrb, selfKnowledge, magic, reward, cosmetics, world
         static func < (lhs: Beat, rhs: Beat) -> Bool { lhs.rawValue < rhs.rawValue }
     }
 
-    // Canned decomposition (beat 3). No backend, no typing.
+    // Beat 3 sample. Left untouched it uses these canned steps; an edited
+    // title gets a real decomposition instead.
     private static let sampleTaskTitle = "Write a history essay 😩"
     private static let cannedSteps: [(text: String, minutes: Int)] = [
         ("Open a doc and write one ugly sentence.", 2),
@@ -38,6 +40,9 @@ struct TutorialView: View {
     private static let chips = ["Homework", "Studying", "Chores", "Everything, honestly"]
 
     // Beat 3
+    @State private var taskTitle = Self.sampleTaskTitle
+    @State private var steps: [(text: String, minutes: Int)] = Self.cannedSteps
+    @FocusState private var titleFocused: Bool
     @State private var isDecomposing = false
     @State private var visibleSteps = 0
     @State private var createdTask: TaskItem?
@@ -49,6 +54,10 @@ struct TutorialView: View {
     @State private var showConfetti = false
     @State private var earnedXPLabel: Int = 0
     @State private var streakLabel: Int = 0
+
+    // Cosmetics teaser. Preview only; nothing here can equip.
+    @State private var teaserCoreKey: String?
+    private static let teaserCoreKeys = ["ember", "nebula", "solar"]
 
     // Beat 5
     @State private var tourStep = 0
@@ -73,6 +82,7 @@ struct TutorialView: View {
                     case .selfKnowledge: selfKnowledgeBeat
                     case .magic: magicBeat
                     case .reward: rewardBeat
+                    case .cosmetics: cosmeticsBeat
                     case .world: worldBeat
                     }
                 }
@@ -166,12 +176,23 @@ struct TutorialView: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
 
-                Text(Self.sampleTaskTitle)
+                TextField("The thing you're avoiding", text: $taskTitle)
                     .font(.fokusRounded(.title3))
                     .foregroundStyle(Color.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .submitLabel(.done)
+                    .focused($titleFocused)
+                    .disabled(isDecomposing)
                     .frame(maxWidth: .infinity)
                     .padding(20)
                     .fokusCard()
+                    .accessibilityHint("Edit to use one of your own tasks")
+
+                if !isDecomposing {
+                    Text("Tap it to swap in a real one of yours.")
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
+                }
             }
 
             if isDecomposing {
@@ -182,7 +203,7 @@ struct TutorialView: View {
                 .padding(.top, 12)
             } else if visibleSteps == 0 {
                 Button {
-                    startCannedDecomposition()
+                    startDecomposition()
                 } label: {
                     Label("Break it down", systemImage: "wand.and.stars")
                 }
@@ -192,19 +213,19 @@ struct TutorialView: View {
             }
 
             if visibleSteps > 0 {
-                Text("One scary task → five easy moves:")
+                Text("One scary task → \(stepCountWord) easy moves:")
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
 
                 VStack(spacing: 10) {
-                    ForEach(Array(Self.cannedSteps.prefix(visibleSteps).enumerated()), id: \.offset) { index, step in
+                    ForEach(Array(steps.prefix(visibleSteps).enumerated()), id: \.offset) { index, step in
                         tutorialStepCard(index: index, text: step.text, minutes: step.minutes, highlighted: index == 0)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
 
-                if visibleSteps == Self.cannedSteps.count {
-                    Button("Try the first one. It's only 2 minutes") {
+                if visibleSteps == steps.count {
+                    Button("Try the first one. It's only \(minutesLabel(firstStepMinutes))") {
                         advance(to: .reward)
                     }
                     .fokusPrimaryCapsule()
@@ -239,24 +260,62 @@ struct TutorialView: View {
         .fokusCard(fill: highlighted ? .surfaceRaised : .surface)
     }
 
-    private func startCannedDecomposition() {
+    private var trimmedTitle: String {
+        taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var firstStepMinutes: Int { max(1, steps.first?.minutes ?? 2) }
+
+    private var stepCountWord: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .spellOut
+        return formatter.string(from: steps.count as NSNumber) ?? "\(steps.count)"
+    }
+
+    private func minutesLabel(_ minutes: Int) -> String {
+        minutes == 1 ? "1 minute" : "\(minutes) minutes"
+    }
+
+    private func startDecomposition() {
+        titleFocused = false
+        let isCustom = !trimmedTitle.isEmpty && trimmedTitle != Self.sampleTaskTitle
+        let title = isCustom ? trimmedTitle : Self.sampleTaskTitle
+        if !isCustom { taskTitle = Self.sampleTaskTitle }
+
         withAnimation(.fokusSpring) { isDecomposing = true }
         Task {
-            try? await Task.sleep(for: .seconds(2.4))
+            if isCustom {
+                let start = Date()
+                let microtasks = await DecompositionService.decompose(
+                    title: title,
+                    multiplier: appState.profile.estimateMultiplier
+                )
+                let decomposed = microtasks
+                    .sorted { $0.orderIndex < $1.orderIndex }
+                    .map { (text: $0.text, minutes: $0.estimatedMinutes) }
+                steps = decomposed.isEmpty ? Self.cannedSteps : decomposed
+                // Keep the "thinking" beat at least as long as the canned one.
+                let remaining = 2.4 - Date().timeIntervalSince(start)
+                if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            } else {
+                steps = Self.cannedSteps
+                try? await Task.sleep(for: .seconds(2.4))
+            }
+            secondsRemaining = firstStepMinutes * 60
             withAnimation(.fokusSpring) { isDecomposing = false }
 
             // Create the real task so it lives on Home afterward.
             if !isReplay {
-                let microtasks = Self.cannedSteps.enumerated().map { index, step in
+                let microtasks = steps.enumerated().map { index, step in
                     Microtask(orderIndex: index + 1, text: step.text, estimatedMinutes: step.minutes)
                 }
-                let task = TaskItem(title: Self.sampleTaskTitle, taskType: "essay", microtasks: microtasks)
+                let task = TaskItem(title: title, taskType: isCustom ? nil : "essay", microtasks: microtasks)
                 appState.addTask(task)
                 createdTask = task
             }
 
             // Cascade the cards in.
-            for step in 1...Self.cannedSteps.count {
+            for step in 1...steps.count {
                 try? await Task.sleep(for: .milliseconds(180))
                 withAnimation(.fokusSpring) { visibleSteps = step }
             }
@@ -302,12 +361,12 @@ struct TutorialView: View {
                         .padding(.top, 4)
                 }
 
-                Button("That felt good. What else?") { advance(to: .world) }
+                Button("That felt good. What else?") { advance(to: .cosmetics) }
                     .fokusPrimaryCapsule()
                     .padding(.top, 8)
             } else {
                 VStack(spacing: 8) {
-                    Text(Self.cannedSteps[0].text)
+                    Text(steps.first?.text ?? Self.cannedSteps[0].text)
                         .font(.fokusRounded(.title3))
                         .foregroundStyle(Color.textPrimary)
                         .multilineTextAlignment(.center)
@@ -317,7 +376,7 @@ struct TutorialView: View {
                         .foregroundStyle(Color.textPrimary)
                         .monospacedDigit()
 
-                    Text("Just start. Only 2 minutes.")
+                    Text("Just start. Only \(minutesLabel(firstStepMinutes)).")
                         .font(.body)
                         .foregroundStyle(Color.textSecondary)
                 }
@@ -349,7 +408,7 @@ struct TutorialView: View {
                 taskId: task.id,
                 microtaskId: firstStep.id,
                 outcome: .done,
-                actualMinutes: max(1, (120 - secondsRemaining) / 60),
+                actualMinutes: max(1, (firstStepMinutes * 60 - secondsRemaining) / 60),
                 allowChest: false  // keep the tutorial moment a clean +10
             )
             // Show the simple +10; achievements surface later so the moment stays clean.
@@ -368,6 +427,97 @@ struct TutorialView: View {
             try? await Task.sleep(for: .seconds(1.2))
             withAnimation(.easeOut(duration: 0.3)) { showConfetti = false }
         }
+    }
+
+    // MARK: Beat 4½ — Your orb can level up its look
+
+    private var cosmeticsBeat: some View {
+        let previewKey = teaserCoreKey ?? appState.profile.selectedOrbCore
+        return VStack(spacing: 24) {
+            FocusOrb(
+                state: .pulsing,
+                level: appState.currentLevel,
+                core: .named(previewKey),
+                aura: .named(appState.profile.selectedOrbAura),
+                activity: .busy,
+                size: 110
+            )
+            .animation(.fokusSpring, value: previewKey)
+
+            VStack(spacing: 8) {
+                Text("Your orb can dress up.")
+                    .font(.fokusRounded(.title2))
+                    .foregroundStyle(Color.textPrimary)
+                Text("New cores, auras, and trails unlock as you level up. No shop, no prices. Just keep showing up.")
+                    .font(.body)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(Self.teaserCoreKeys, id: \.self) { key in
+                    teaserChip(key)
+                }
+            }
+
+            Text("Tap one to peek.")
+                .font(.caption)
+                .foregroundStyle(Color.textSecondary)
+
+            Button("I want that") { advance(to: .world) }
+                .fokusPrimaryCapsule()
+        }
+    }
+
+    private func teaserChip(_ key: String) -> some View {
+        let core = OrbCoreStyle.named(key)
+        let unlockLevel = CosmeticCatalog.item(slot: .orbCore, key: key)?.unlockLevel ?? 1
+        let unlocked = appState.isUnlocked(slot: .orbCore, key: key)
+        let selected = teaserCoreKey == key
+
+        return Button {
+            Haptics.light()
+            withAnimation(.fokusSpring) { teaserCoreKey = selected ? nil : key }
+        } label: {
+            VStack(spacing: 8) {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            stops: [
+                                .init(color: core.core, location: 0),
+                                .init(color: core.mid, location: 0.55),
+                                .init(color: core.rim, location: 1),
+                            ],
+                            center: UnitPoint(x: 0.5, y: 0.42),
+                            startRadius: 0, endRadius: 30
+                        )
+                    )
+                    .overlay(Circle().strokeBorder(core.rim.opacity(0.5), lineWidth: 1))
+                    .shadow(color: core.mid.opacity(0.5), radius: 8)
+                    .frame(width: 48, height: 48)
+
+                Text(core.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Label(unlocked ? "Unlocked" : "Lv \(unlockLevel)", systemImage: unlocked ? "checkmark" : "lock.fill")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .fokusCard(fill: selected ? .surfaceRaised : .surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: Layout.cardRadius, style: .continuous)
+                    .stroke(selected ? Color.focus : .clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(core.name) core preview")
+        .accessibilityValue(unlocked ? "Unlocked" : "Unlocks at level \(unlockLevel)")
     }
 
     // MARK: Beat 5 — Here's your world

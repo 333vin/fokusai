@@ -10,10 +10,13 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showingNewTask = false
     @State private var selectedTask: TaskItem?
     @State private var emptyStateLine = Copy.random(.homeEmpty)
+    @State private var orbDrag: CGSize = .zero
+    @State private var isDraggingOrb = false
 
     var body: some View {
         NavigationStack {
@@ -31,7 +34,11 @@ struct HomeView: View {
                             activity: appState.activeTasks.isEmpty ? .idle : .busy,
                             size: 130
                         )
-                        .buttonTip("Focus Orb", detail: "Your companion. Its little face changes with mood, time of day, and what you just did.")
+                        .buttonTip("Focus Orb", detail: "Your companion. Its little face changes with mood, time of day, and what you just did. Give it a drag.")
+                        .contentShape(Circle())
+                        .scaleEffect(isDraggingOrb && !reduceMotion ? 1.06 : 1)
+                        .offset(orbDrag)
+                        .gesture(orbDragGesture)
                         .frame(maxWidth: .infinity)
                         .padding(.top, -4)
                     }
@@ -145,6 +152,45 @@ struct HomeView: View {
     }
 
     @State private var navigateToUpgrades = false
+
+    // MARK: Draggable orb (cosmetic)
+
+    /// Bounds keep the orb's core inside its own row: it never reaches the
+    /// stat bar below, the toolbar above, or the screen edges.
+    private static let orbDragLimitX: CGFloat = 90
+    private static let orbDragLimitUp: CGFloat = 40
+    private static let orbDragLimitDown: CGFloat = 24
+
+    private var orbDragGesture: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                if !isDraggingOrb {
+                    Haptics.light()
+                    withAnimation(.fokusSpring) { isDraggingOrb = true }
+                }
+                let dy = value.translation.height
+                orbDrag = CGSize(
+                    width: Self.rubberBand(value.translation.width, limit: Self.orbDragLimitX),
+                    height: Self.rubberBand(dy, limit: dy < 0 ? Self.orbDragLimitUp : Self.orbDragLimitDown)
+                )
+            }
+            .onEnded { _ in
+                let release: Animation = reduceMotion
+                    ? .easeOut(duration: 0.2)
+                    : .spring(response: 0.45, dampingFraction: 0.45)
+                withAnimation(release) {
+                    orbDrag = .zero
+                    isDraggingOrb = false
+                }
+            }
+    }
+
+    /// Tracks the finger 1:1 at first, resists harder the farther it's
+    /// pulled, and never exceeds `limit`.
+    private static func rubberBand(_ value: CGFloat, limit: CGFloat) -> CGFloat {
+        let sign: CGFloat = value < 0 ? -1 : 1
+        return sign * limit * (1 - 1 / (abs(value) / limit + 1))
+    }
 
     // MARK: Warm notices (freeze used / streak reset / delete tip)
 
