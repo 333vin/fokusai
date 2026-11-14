@@ -109,6 +109,7 @@ class AppState {
         newTask.userId = profile.id
         tasks.insert(newTask, at: 0)
         persist()
+        AnalyticsService.log("task_created")
     }
 
     func deleteTask(_ taskId: UUID) {
@@ -154,6 +155,7 @@ class AppState {
             tasks[taskIndex].microtasks[mtIndex].actualMinutes = actualMinutes
             stats.totalMicrotasksCompleted += 1
             result.xpAwarded += 10
+            AnalyticsService.log("microtask_completed")
 
             let isFirstOfDay = !isActiveToday
             let streakChange = advanceStreak()
@@ -168,6 +170,7 @@ class AppState {
                 stats.totalTasksCompleted += 1
                 result.xpAwarded += 25
                 result.wholeTaskCompleted = true
+                AnalyticsService.log("task_completed")
             }
 
             // Focus Chest: variable, always positive, never a loss.

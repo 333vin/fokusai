@@ -17,8 +17,11 @@ enum SupabaseConfig {
     
     // MARK: - Validation
     static var isConfigured: Bool {
-        !supabaseURL.contains("ncuqomxqmvfuufwdntwn") &&
-        !supabaseAnonKey.contains("sb_publishable_d3TMQTNU8VnRUGV5iYGHhw_JaEPuYvY")
+        !supabaseURL.contains("YOUR_ACTUAL_PROJECT_ID") &&
+        !supabaseURL.contains("YOUR_PROJECT") &&
+        !supabaseAnonKey.contains("YOUR_ACTUAL_KEY") &&
+        !supabaseAnonKey.isEmpty &&
+        !supabaseURL.isEmpty
     }
 }
 

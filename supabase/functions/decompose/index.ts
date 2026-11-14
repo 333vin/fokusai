@@ -1,13 +1,18 @@
 // FokusAI — decompose: turns one task into tiny, physical microtasks via Claude.
 // The Anthropic key never leaves this function.
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 const MODEL = "claude-haiku-4-5";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 
 const SYSTEM = `You break a teenager's task into 4-6 microtasks for an anti-procrastination app.
 
@@ -29,12 +34,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
+    if (!anthropicKey) {
+      console.error("ANTHROPIC_API_KEY is not set on this function");
+      return json({
+        error: "missing_anthropic_key",
+        hint: "Set the secret: supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref ncuqomxqmvfuufwdntwn",
+      }, 503);
+    }
+
     const body = await req.json();
     const title = body?.task?.title?.trim();
     if (!title) {
-      return new Response(JSON.stringify({ error: "task.title required" }), {
-        status: 400, headers: { ...cors, "Content-Type": "application/json" },
-      });
+      return json({ error: "task.title required" }, 400);
     }
 
     const ctx = body?.task?.context ?? {};
@@ -53,7 +65,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
+        "x-api-key": anthropicKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
@@ -65,10 +77,14 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      console.error("anthropic", res.status, await res.text());
-      return new Response(JSON.stringify({ error: "decomposition_failed" }), {
-        status: 502, headers: { ...cors, "Content-Type": "application/json" },
-      });
+      const anthropicBody = await res.text();
+      console.error("anthropic", res.status, anthropicBody);
+      return json({
+        error: "decomposition_failed",
+        anthropic_status: res.status,
+        // Short, safe snippet for dashboard debugging (no key material).
+        anthropic_error: anthropicBody.slice(0, 300),
+      }, 502);
     }
 
     const data = await res.json();
@@ -79,9 +95,7 @@ Deno.serve(async (req) => {
     try { parsed = JSON.parse(cleaned); }
     catch {
       console.error("bad json", raw);
-      return new Response(JSON.stringify({ error: "bad_model_output" }), {
-        status: 502, headers: { ...cors, "Content-Type": "application/json" },
-      });
+      return json({ error: "bad_model_output" }, 502);
     }
 
     parsed.microtasks = (parsed.microtasks ?? []).map((m: any, i: number) => ({
@@ -90,13 +104,9 @@ Deno.serve(async (req) => {
       estimated_minutes: Math.max(1, Math.round((m.estimated_minutes ?? 3) * multiplier)),
     }));
 
-    return new Response(JSON.stringify(parsed), {
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+    return json(parsed);
   } catch (e) {
     console.error(e);
-    return new Response(JSON.stringify({ error: "unexpected" }), {
-      status: 500, headers: { ...cors, "Content-Type": "application/json" },
-    });
+    return json({ error: "unexpected" }, 500);
   }
 });

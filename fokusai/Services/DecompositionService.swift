@@ -14,12 +14,15 @@ enum DecompositionService {
         multiplier: Double = 1.0
     ) async -> [Microtask] {
         do {
-            return try await remoteDecompose(
+            let microtasks = try await remoteDecompose(
                 title: title, format: format,
                 timeAvailableMinutes: timeAvailableMinutes, multiplier: multiplier
             )
+            AnalyticsService.log("decomposition_succeeded")
+            return microtasks
         } catch {
             print("⚠️ DECOMPOSE remote failed → using template. Reason:", error)
+            AnalyticsService.log("decomposition_fell_back")
             return localDecompose(title: title, format: format)
         }
     }
